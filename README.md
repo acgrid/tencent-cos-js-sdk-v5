@@ -4,6 +4,83 @@
 
 [releases and changelog](https://github.com/tencentyun/cos-js-sdk-v5/releases)
 
+## 本分支依赖迁移说明
+
+### 迁移动机
+
+本分支用于维护一个长期未同步上游的 fork。原 SDK 依赖的 `fast-xml-parser` 版本较旧，已经不适合继续作为浏览器端 XML 解析基础。本次迁移的目标是参考 `@acgrid/cos-nodejs-sdk-v5` 的依赖升级结果，在尽量保持原有 JS SDK API 和打包产物形态的前提下，升级 XML 解析依赖，并补齐一套可以使用私有 `.env`、自建 STS 服务和真实 COS 测试桶重复运行的验证流程。
+
+### 主要改动
+
+- 将运行时 XML 解析依赖升级到 `fast-xml-parser@^5.9.2`，并移除旧的 `patch-package` 补丁。
+- 调整 webpack 4 构建，让 `fast-xml-parser` 及其现代语法依赖在浏览器包里经过 Babel 转译。
+- 新增 `server:env`、`test:env` 和 `.env.example`，测试时可以通过私有 `.env` 提供 `SecretId`、`SecretKey`、`Bucket`、`Region`、`jssdkStsUrl` 等配置。
+- 参考 NodeJS SDK 的测试 STS helper，给本地 STS 服务补齐 CORS 响应和 `OPTIONS` 预检支持。
+- 修复旧式 `AppId`/短 bucket 兼容边界：当短 bucket 名本身以数字结尾时，显式传入的 `AppId` 仍会被正确拼接。
+- 将依赖特殊云上资源的测试改为显式 opt-in，例如自定义域名和历史外部 retry fixture。
+- 增加媒体处理测试 fixture 的环境变量配置，并修复非 `RawBody` 场景下 m3u8 文本成功返回不能合并响应元数据的问题。
+
+### 测试手册
+
+以下测试说明面向源码仓库 checkout，不属于安装后的 npm 包运行时功能。请使用专门的 COS 测试桶，不要使用生产桶。
+
+```bash
+cp .env.example .env.local
+
+# 编辑 .env.local，至少填写：
+# SecretId / SecretKey / Bucket / Region / ReplicationBucket / ReplicationRegion / Uin
+# jssdkStsUrl=http://127.0.0.1:3300
+```
+
+如果没有现成的 STS 测试服务，可以使用本仓库 `server/sts.js`，或使用同级 NodeJS SDK 仓库里的 `test/sts-server.js`。使用 NodeJS SDK helper 时，需要让临时密钥覆盖 JS SDK 测试路径：
+
+```bash
+DOTENV_CONFIG_PATH=/path/to/tencent-cos-js-sdk-v5/.env.local \
+STS_PORT=3300 \
+STS_ALLOW_PREFIX=js-sdk/test/ \
+node -r /path/to/tencent-cos-js-sdk-v5/node_modules/dotenv/config test/sts-server.js
+```
+
+然后在 JS SDK 仓库运行：
+
+```bash
+DOTENV_CONFIG_PATH=.env.local npm run test:env
+```
+
+可选的环境变量如下：
+
+- `COS_RUN_BUCKET_DOMAIN_TESTS=1`：运行自定义域名测试，需要配置可用且已备案/审核通过的域名。
+- `COS_BUCKET_DOMAIN_REST` / `COS_BUCKET_DOMAIN_WEBSITE`：自定义域名测试使用的真实域名。可以只配置其中一个。
+- `COS_RUN_RETRY_TESTS=1`：运行历史外部 retry fixture 测试。
+- `COS_RETRY_BUCKET` / `COS_RETRY_REGION`：历史 retry fixture 的桶和地域；默认值仍是上游旧测试桶。
+- `COS_RAW_BODY_MP4_KEY`：媒体处理 snapshot 测试使用的 mp4 对象，默认 `2221333test.mp4`。
+- `COS_RAW_BODY_M3U8_KEY`：媒体处理 pm3u8 测试使用的 m3u8 对象，默认 `2视频/peachtest.mp4.m3u8`。
+
+### 测试结果与注意事项
+
+本次迁移使用真实 COS 测试桶、本地 STS 服务和本地生成的无版权风险媒体 fixture 做过回归。已验证的关键结果包括：
+
+```text
+npm audit --omit=dev --json
+# production dependencies: 0 vulnerabilities
+
+npm run test:env -- --runTestsByPath test/test.js -t "putObject\\(\\) options.AppId|putObject\\(\\) BucketShortName" --coverage=false
+# 2 passed
+
+npm run test:env -- --runTestsByPath test/test.js -t "BucketDomain" --coverage=false
+# 5 passed, with COS_RUN_BUCKET_DOMAIN_TESTS=1 and real domain env
+
+npm run test:env -- --runTestsByPath test/test.js -t "RawBody error|returnBody" --coverage=false
+# 8 passed
+
+NODE_OPTIONS=--openssl-legacy-provider npm run build
+# passed on the local Node.js 24 / webpack 4 environment
+```
+
+测试过程中遇到并处理了以下边界情况：`jssdkStsUrl` 可以对接 Node.js 自建 STS 服务，但浏览器/JSDOM 测试必须有 CORS 和 `OPTIONS` 预检响应；短 bucket 名如果本身以数字结尾，旧兼容逻辑会误判为完整 bucket；自定义域名测试必须使用真实、可审核通过的域名，不能继续使用上游占位域名；媒体处理测试需要真实可处理的 mp4/m3u8 对象；CI dataset 相关接口仍依赖额外数据集资源，当前只验证错误 body 解析。
+
+基于以上验证，本分支对 `fast-xml-parser` 升级和浏览器打包兼容性有较高信心，适合继续作为本 fork 的依赖维护版本。但这不是腾讯云官方发布版本，且浏览器端业务对历史兼容行为更敏感。如果客户端代码依赖短 bucket/AppId 老写法，或业务路径依赖媒体处理、CI、私有部署域名 CSP 等能力，不建议直接将生产业务切换到本 fork；请先保留现有版本，针对真实浏览器、真实 STS、真实 bucket CORS 和业务用到的 COS/CI 接口做完整回归。
+
 ## Get started
 
 ### 一、前期准备
@@ -123,12 +200,12 @@ document.getElementById('file-selector').onchange = function () {
 
 支持 webpack 打包的场景，可以用 npm 引入作为模块
 ```shell
-npm i cos-js-sdk-v5 --save
+npm i @acgrid/cos-js-sdk-v5 --save
 ```
 
 ## Start Demo
 ```
-1. git clone cos-js-sdk-v5 至本地
+1. git clone tencent-cos-js-sdk-v5 至本地
 2. cd cos-js-sdk-v5 进入根目录后执行：npm install
 3. 修改 server 文件夹中 sts.js 或 sts.php 中的 secretId、secretKey、bucket、region 配置；注意allowPrefix和allowActions需要设置适当的权限
 4. 修改 demo/index.html 中config的Bucket、Region 参数

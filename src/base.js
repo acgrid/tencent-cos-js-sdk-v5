@@ -4316,6 +4316,9 @@ function _submitRequest(params, callback) {
             }
           }
         }
+        if (data && typeof data !== 'object') {
+          data = { Body: data };
+        }
         data = util.extend(data || {}, attrs);
         callback(null, data);
       }

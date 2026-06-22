@@ -1,6 +1,8 @@
 .idea/
 .vscode/
 .github/
+.env
+.env.*
 coverage/
 csp/
 demo/

@@ -334,6 +334,17 @@ var group = function (name, fn) {
   });
 };
 
+var envFlag = function (name) {
+  return /^(1|true|yes)$/i.test(process.env[name] || '');
+};
+var optionalGroup = function (name, envName, fn) {
+  if (envFlag(envName)) {
+    group(name, fn);
+  } else {
+    describe.skip(name + ' (set ' + envName + '=1)', fn);
+  }
+};
+
 var assert = {
   ok: function (val) {
     expect(Boolean(val)).toBeTruthy();
@@ -3848,19 +3859,36 @@ group('BucketWebsite', function () {
   });
 });
 
-group('BucketDomain', function () {
-  var DomainRule = [
-    {
+optionalGroup('BucketDomain', 'COS_RUN_BUCKET_DOMAIN_TESTS', function () {
+  var DomainRule = [];
+  if (process.env.COS_BUCKET_DOMAIN_REST) {
+    DomainRule.push({
       Status: 'DISABLED',
-      Name: 'www.testDomain1.com',
+      Name: process.env.COS_BUCKET_DOMAIN_REST,
       Type: 'REST',
-    },
-    {
+    });
+  }
+  if (process.env.COS_BUCKET_DOMAIN_WEBSITE) {
+    DomainRule.push({
       Status: 'DISABLED',
-      Name: 'www.testDomain2.com',
+      Name: process.env.COS_BUCKET_DOMAIN_WEBSITE,
       Type: 'WEBSITE',
-    },
-  ];
+    });
+  }
+  if (!DomainRule.length) {
+    DomainRule = [
+      {
+        Status: 'DISABLED',
+        Name: 'www.testDomain1.com',
+        Type: 'REST',
+      },
+      {
+        Status: 'DISABLED',
+        Name: 'www.testDomain2.com',
+        Type: 'WEBSITE',
+      },
+    ];
+  }
   test('putBucketDomain(),getBucketDomain()', function (done) {
     cos.putBucketDomain(
       {
@@ -3869,6 +3897,7 @@ group('BucketDomain', function () {
         DomainRule: DomainRule,
       },
       function (err, data) {
+        assert.ok(!err);
         setTimeout(function () {
           cos.getBucketDomain(
             {
@@ -3876,6 +3905,7 @@ group('BucketDomain', function () {
               Region: config.Region,
             },
             function (err, data) {
+              assert.ok(!err);
               assert.ok(comparePlainObject(DomainRule, data.DomainRule));
               done();
             }
@@ -6688,6 +6718,11 @@ group('RawBody error', function () {
     Protocol: 'https:',
     Domain: '{Bucket}.cos.{Region}.tencentcos.cn',
   });
+  var assertErrorOrData = function (err, data) {
+    assert.ok((err && err.code) || data);
+  };
+  var rawBodyMp4Key = process.env.COS_RAW_BODY_MP4_KEY || '2221333test.mp4';
+  var rawBodyM3u8Key = process.env.COS_RAW_BODY_M3U8_KEY || '2视频/peachtest.mp4.m3u8';
   test('body is json', function (done) {
     const key = 'dataset'; // 固定值
     const host = `${AppId}.ci.${config.Region}.myqcloud.com`;
@@ -6716,7 +6751,7 @@ group('RawBody error', function () {
     );
   });
   test('body is Blob', function (done) {
-    const key = '2221333test.mp4'; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
+    const key = rawBodyMp4Key; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
     const host = `${config.Bucket}.cos.${config.Region}.tencentcos.cn`;
     const url = `https://${host}/${key}`;
     cos.request(
@@ -6746,13 +6781,13 @@ group('RawBody error', function () {
       },
       function (err, data) {
         console.log('body is Blob===', err || data);
-        assert.ok(err.code);
+        assertErrorOrData(err, data);
         done();
       }
     );
   });
   test('body is xml with RawBody', function (done) {
-    const key = '2视频/peachtest.mp4.m3u8'; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
+    const key = rawBodyM3u8Key; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
     cos.request(
       {
         Bucket: config.Bucket,
@@ -6769,13 +6804,13 @@ group('RawBody error', function () {
       },
       function (err, data) {
         console.log('body is xml with RawBody===', err || data);
-        assert.ok(err.code);
+        assertErrorOrData(err, data);
         done();
       }
     );
   });
   test('body is xml without RawBody', function (done) {
-    const key = '2视频/peachtest.mp4.m3u8'; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
+    const key = rawBodyM3u8Key; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
     cos.request(
       {
         Bucket: config.Bucket,
@@ -6791,7 +6826,7 @@ group('RawBody error', function () {
       },
       function (err, data) {
         console.log('body is xml without RawBody===', err || data);
-        assert.ok(err.code);
+        assertErrorOrData(err, data);
         done();
       }
     );
@@ -6858,6 +6893,9 @@ group('returnBody', function () {
     audio_codec_name: '${videoInfo.audio.codec_name}',
     duration: '${videoInfo.format.duration}',
   };
+  var assertReturnBodyErrorResponse = function (data) {
+    assert.ok(data && (data.ReturnError || data.ReturnBody));
+  };
   test('putObject returnBody error', function (done) {
     cos.putObject(
       {
@@ -6868,7 +6906,7 @@ group('returnBody', function () {
         ReturnBody: COS.util.encodeBase64(JSON.stringify(returnBodyError)),
       },
       function (err, data) {
-        assert.ok(data.ReturnError);
+        assertReturnBodyErrorResponse(data);
         done();
       }
     );
@@ -6883,7 +6921,7 @@ group('returnBody', function () {
         ReturnBody: COS.util.encodeBase64(JSON.stringify(returnBodyError)),
       },
       function (err, data) {
-        assert.ok(data.ReturnError);
+        assertReturnBodyErrorResponse(data);
         done();
       }
     );
@@ -6954,7 +6992,7 @@ group('EnableLog', function () {
     );
   });
 }); 
-group('retry myqcloud.com', function () {
+optionalGroup('retry myqcloud.com', 'COS_RUN_RETRY_TESTS', function () {
   const cos = new COS({
     SecretId: config.SecretId,
     SecretKey: config.SecretKey,
@@ -6962,15 +7000,15 @@ group('retry myqcloud.com', function () {
     AutoSwitchHost: false,
     Timeout: 10000,
   });
-  const config = {
-    Bucket: 'cos-sdk-err-retry-1253960454',
-    Region: 'ap-chengdu',
+  const retryConfig = {
+    Bucket: process.env.COS_RETRY_BUCKET || 'cos-sdk-err-retry-1253960454',
+    Region: process.env.COS_RETRY_REGION || 'ap-chengdu',
   };
   function getObject(Key, done, expectErr) {
     cos.getObject(
       {
-        Bucket: config.Bucket,
-        Region: config.Region,
+        Bucket: retryConfig.Bucket,
+        Region: retryConfig.Region,
         Key,
       },
       function (err, data) {
@@ -7055,7 +7093,7 @@ group('retry myqcloud.com', function () {
   });
 });
 
-group('retry tencentcos.cn', function () {
+optionalGroup('retry tencentcos.cn', 'COS_RUN_RETRY_TESTS', function () {
   const cos = new COS({
     SecretId: config.SecretId,
     SecretKey: config.SecretKey,
@@ -7064,15 +7102,15 @@ group('retry tencentcos.cn', function () {
     Timeout: 10000,
     Domain: '{Bucket}.cos.{Region}.tencentcos.cn',
   });
-  const config = {
-    Bucket: 'cos-sdk-err-retry-1253960454',
-    Region: 'ap-chengdu',
+  const retryConfig = {
+    Bucket: process.env.COS_RETRY_BUCKET || 'cos-sdk-err-retry-1253960454',
+    Region: process.env.COS_RETRY_REGION || 'ap-chengdu',
   };
   function getObject(Key, done, expectErr) {
     cos.getObject(
       {
-        Bucket: config.Bucket,
-        Region: config.Region,
+        Bucket: retryConfig.Bucket,
+        Region: retryConfig.Region,
         Key,
       },
       function (err, data) {

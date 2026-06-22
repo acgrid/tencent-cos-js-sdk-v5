@@ -47,6 +47,8 @@ var replaceDevCode = function (list) {
 };
 replaceVersion();
 
+var transpileNodeModules = /node_modules[\\/](fast-xml-parser|@nodable[\\/]entities|path-expression-matcher)[\\/]/;
+
 module.exports = {
   mode: process.env.NODE_ENV,
   entry: path.resolve(__dirname, './index.js'),
@@ -62,9 +64,11 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.js$/,
+        test: /\.(js|cjs)$/,
         loader: 'babel-loader',
-        exclude: /node_modules/
+        exclude: function (modulePath) {
+          return /node_modules/.test(modulePath) && !transpileNodeModules.test(modulePath);
+        }
       }
     ]
   },
