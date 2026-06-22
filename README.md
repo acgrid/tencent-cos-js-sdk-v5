@@ -53,8 +53,18 @@ DOTENV_CONFIG_PATH=.env.local npm run test:env
 - `COS_BUCKET_DOMAIN_REST` / `COS_BUCKET_DOMAIN_WEBSITE`：自定义域名测试使用的真实域名。可以只配置其中一个。
 - `COS_RUN_RETRY_TESTS=1`：运行历史外部 retry fixture 测试。
 - `COS_RETRY_BUCKET` / `COS_RETRY_REGION`：历史 retry fixture 的桶和地域；默认值仍是上游旧测试桶。
+- `COS_RAW_BODY_BUCKET` / `COS_RAW_BODY_REGION`：媒体处理 RawBody 测试使用的桶和地域；默认使用 `Bucket` / `Region`。
 - `COS_RAW_BODY_MP4_KEY`：媒体处理 snapshot 测试使用的 mp4 对象，默认 `2221333test.mp4`。
 - `COS_RAW_BODY_M3U8_KEY`：媒体处理 pm3u8 测试使用的 m3u8 对象，默认 `2视频/peachtest.mp4.m3u8`。
+- `COS_MEDIA_FIXTURE_DIR`：本地媒体 fixture 目录，默认 `/tmp/cos-media-fixtures`。
+- `COS_MEDIA_TARGET_BUCKET` / `COS_MEDIA_TARGET_REGION`：运行 `test/copy-media-fixtures.js` 时的上传目标；默认使用 `ReplicationBucket` / `ReplicationRegion`。
+- `COS_NODEJS_SDK_PATH`：运行 `test/copy-media-fixtures.js` 时使用的 NodeJS SDK 路径，默认 `../tencent-cos-nodejs-sdk-v5`。
+
+如果需要把本地生成的极小媒体 fixture 上传到测试桶，可以运行：
+
+```bash
+DOTENV_CONFIG_PATH=.env.local node test/copy-media-fixtures.js
+```
 
 ### 测试结果与注意事项
 

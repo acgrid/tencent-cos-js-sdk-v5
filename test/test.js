@@ -6723,6 +6723,8 @@ group('RawBody error', function () {
   };
   var rawBodyMp4Key = process.env.COS_RAW_BODY_MP4_KEY || '2221333test.mp4';
   var rawBodyM3u8Key = process.env.COS_RAW_BODY_M3U8_KEY || '2视频/peachtest.mp4.m3u8';
+  var rawBodyBucket = process.env.COS_RAW_BODY_BUCKET || config.Bucket;
+  var rawBodyRegion = process.env.COS_RAW_BODY_REGION || config.Region;
   test('body is json', function (done) {
     const key = 'dataset'; // 固定值
     const host = `${AppId}.ci.${config.Region}.myqcloud.com`;
@@ -6752,7 +6754,7 @@ group('RawBody error', function () {
   });
   test('body is Blob', function (done) {
     const key = rawBodyMp4Key; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
-    const host = `${config.Bucket}.cos.${config.Region}.tencentcos.cn`;
+    const host = `${rawBodyBucket}.cos.${rawBodyRegion}.tencentcos.cn`;
     const url = `https://${host}/${key}`;
     cos.request(
       {
@@ -6790,8 +6792,8 @@ group('RawBody error', function () {
     const key = rawBodyM3u8Key; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
     cos.request(
       {
-        Bucket: config.Bucket,
-        Region: config.Region,
+        Bucket: rawBodyBucket,
+        Region: rawBodyRegion,
         Method: 'GET', // 固定值，必须
         Key: key, // 必须
         Query: {
@@ -6813,8 +6815,8 @@ group('RawBody error', function () {
     const key = rawBodyM3u8Key; // ObjectKey: 存在cos的媒体文件路径，比如test.mp4
     cos.request(
       {
-        Bucket: config.Bucket,
-        Region: config.Region,
+        Bucket: rawBodyBucket,
+        Region: rawBodyRegion,
         Method: 'GET', // 固定值，必须
         Key: key, // 必须
         Query: {
